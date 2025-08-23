@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from .routers import auth, users, admin,admin_setup
+from fastapi.middleware.cors import CORSMiddleware  # <--- add this
+from .routers import auth, users, admin, admin_setup
 from . import models, database
-from fastapi.middleware.cors import CORSMiddleware 
 
 models.Base.metadata.create_all(bind=database.engine)
 
