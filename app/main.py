@@ -7,7 +7,14 @@ models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI(title="Optivus Backend")
 
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://optivlive.onrender.com",
+        "https://optivlive.vercel.app/",   # your frontend domain
+        "http://localhost:3000"             # local dev
+    ],
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # can also use ["*"] to allow all origins
