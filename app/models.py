@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Float
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -25,6 +25,11 @@ class User(Base):
         backref="referrer",
         remote_side=[referral_code]
     )
+
+    # Referral analytics fields
+    referral_clicks = Column(Integer, default=0)   # how many times their link was clicked
+    referral_signups = Column(Integer, default=0)  # how many registered via their link
+    total_commission = Column(Float, default=0.0)  # total commission earned
 
     # Explicit unique constraint for Postgres foreign key
     __table_args__ = (
