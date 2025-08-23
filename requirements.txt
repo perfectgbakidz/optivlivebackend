@@ -8,8 +8,6 @@ python-jose==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
 email-validator==2.2.0
-<<<<<<< HEAD
 psycopg2-binary==2.9.9
-=======
->>>>>>> ee476611f165e61d9a8a28ebba9f8231b24ce5bd
+
 
