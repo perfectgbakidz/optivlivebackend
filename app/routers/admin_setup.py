@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.post("/create-admin")
 def create_admin(db: Session = Depends(database.get_db)):
-    email = "admin@example.com"
+    email = "admin@optivus.com"
     password = "StrongPassword123"
     hashed_pw = hash_password(password)
 
