@@ -12,7 +12,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
 
     # Each user has a unique referral code
-    referral_code = Column(String, unique=True, index=True, nullable=False)
+    referral_code = Column(String, unique=True, index=True, nullable=True)
 
     # Parent referral must point to another user's referral code
     parent_referral = Column(String, ForeignKey("users.referral_code"), nullable=True)
