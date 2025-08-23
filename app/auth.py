@@ -49,7 +49,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
-        if not email:
+        role: str = payload.get("role")  # 🔑 extract role from JWT
+        if not email or not role:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -57,6 +58,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         raise credentials_exception
+
+    # Sync with DB role if needed
+    user.role = role
     return user
 
 

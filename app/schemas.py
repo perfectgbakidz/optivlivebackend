@@ -37,6 +37,12 @@ class Login(BaseModel):
     password: str
 
 
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    role: str  # include role so frontend knows if admin/user immediately
+
+
 # ---------- Team / Referrals ----------
 
 class TeamMember(BaseModel):
