@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Example: postgresql://postgres:<PASSWORD>@db.<PROJECT_ID>.supabase.co:5432/postgres
+    
     DATABASE_URL: str = ""
     JWT_SECRET: str = ""
 
