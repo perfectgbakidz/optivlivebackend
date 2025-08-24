@@ -125,3 +125,26 @@ class KycProcessRequest(BaseModel):
     userId: int
     action: str   # "approve" or "reject"
     reason: Optional[str] = None
+
+
+# ---------- Admin Stats ----------
+
+class AdminStats(BaseModel):
+    total_users: int
+    total_user_referral_earnings: float
+    pending_withdrawals_count: int
+    protocol_balance: float
+
+
+# ---------- Transactions ----------
+
+class TransactionResponse(BaseModel):
+    id: int
+    user_id: int
+    type: str          # e.g., "deposit", "withdrawal", "referral_bonus"
+    amount: str
+    status: str
+    created_at: str    # assuming stored as string/datetime
+
+    class Config:
+        from_attributes = True
