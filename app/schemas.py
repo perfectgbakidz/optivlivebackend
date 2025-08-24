@@ -22,9 +22,15 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: int
-    referral_code: str
-    parent_referral: Optional[str]
+    referral_code: Optional[str] = None
+    parent_referral: Optional[str] = None
     role: str
+
+    # ✅ Added fields the frontend expects
+    is_kyc_verified: bool = False
+    balance: str = "0.00"  # keep as string for consistency
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -38,9 +44,9 @@ class Login(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    role: str  # include role so frontend knows if admin/user immediately
+    access: str              # 🔑 frontend expects "access", not "access_token"
+    refresh: Optional[str]   # placeholder, can implement refresh later
+    role: str                # include role so frontend knows if admin/user immediately
 
 
 # ---------- Team / Referrals ----------

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Float, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -18,6 +18,12 @@ class User(Base):
     parent_referral = Column(String, ForeignKey("users.referral_code"), nullable=True)
 
     role = Column(String, default="user")  # "user" or "admin"
+
+    # ✅ New fields the frontend expects
+    is_kyc_verified = Column(Boolean, default=False)
+    balance = Column(String, default="0.00")  # stored as string for consistency with frontend
+    firstName = Column(String, nullable=True)
+    lastName = Column(String, nullable=True)
 
     # Relationship to see who was referred by this user
     referrals = relationship(
