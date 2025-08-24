@@ -11,7 +11,8 @@ app = FastAPI(title="Optivus Backend")
 origins = [
     "https://optivlive.onrender.com",   # backend (if needed)
     "https://optivlive.vercel.app",     # frontend
-    "http://localhost:3000"             # local dev
+    "http://localhost:3000",
+    "http://localhost:5173"            # local dev
 ]
 
 app.add_middleware(
