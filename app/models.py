@@ -33,11 +33,45 @@ class User(Base):
     )
 
     # Referral analytics fields
-    referral_clicks = Column(Integer, default=0)   # how many times their link was clicked
-    referral_signups = Column(Integer, default=0)  # how many registered via their link
-    total_commission = Column(Float, default=0.0)  # total commission earned
+    referral_clicks = Column(Integer, default=0)
+    referral_signups = Column(Integer, default=0)
+    total_commission = Column(Float, default=0.0)
 
-    # Explicit unique constraint for Postgres foreign key
+    # Relationships for withdrawals and KYC
+    withdrawals = relationship("Withdrawal", back_populates="user", cascade="all, delete-orphan")
+    kyc_requests = relationship("KycRequest", back_populates="user", cascade="all, delete-orphan")
+
     __table_args__ = (
         UniqueConstraint("referral_code", name="uq_users_referral_code"),
     )
+
+
+class Withdrawal(Base):
+    __tablename__ = "withdrawals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount = Column(String, nullable=False)  # store as string for consistency with frontend
+    bank_name = Column(String, nullable=False)
+    account_number = Column(String, nullable=False)
+    account_name = Column(String, nullable=False)
+    status = Column(String, default="pending")  # pending | approved | denied
+
+    user = relationship("User", back_populates="withdrawals")
+
+
+class KycRequest(Base):
+    __tablename__ = "kyc_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String, default="pending")  # pending | approved | rejected
+    document_url = Column(String, nullable=True)
+
+    # extra details
+    address = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    postal_code = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+
+    user = relationship("User", back_populates="kyc_requests")

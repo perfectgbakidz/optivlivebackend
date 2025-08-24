@@ -5,11 +5,10 @@ from .. import models, schemas, utils, database, auth
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-
 # --------------------------
 # Create User (Admin only)
 # --------------------------
-@router.post("/create-user", response_model=schemas.UserResponse)
+@router.post("/users/create/", response_model=schemas.UserResponse)
 def create_user(
     user: schemas.UserCreate,
     db: Session = Depends(database.get_db),
@@ -24,9 +23,10 @@ def create_user(
     new_user = models.User(
         username=user.username,
         email=user.email,
-        password_hash=utils.hash_password(user.password),
+        password_hash=auth.hash_password(user.password),
         referral_code=new_code,
-        parent_referral=user.referral_code if user.referral_code else None
+        parent_referral=user.referral_code if user.referral_code else None,
+        role=user.role if user.role else "user"
     )
     db.add(new_user)
     db.commit()
@@ -37,7 +37,7 @@ def create_user(
 # --------------------------
 # Get All Users
 # --------------------------
-@router.get("/users", response_model=List[schemas.UserResponse])
+@router.get("/users/", response_model=List[schemas.UserResponse])
 def get_all_users(
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
@@ -46,24 +46,9 @@ def get_all_users(
 
 
 # --------------------------
-# Get Single User by ID
-# --------------------------
-@router.get("/users/{user_id}", response_model=schemas.UserResponse)
-def get_user_by_id(
-    user_id: int,
-    db: Session = Depends(database.get_db),
-    admin=Depends(auth.get_admin_user)
-):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return user
-
-
-# --------------------------
 # Update User
 # --------------------------
-@router.put("/users/{user_id}", response_model=schemas.UserResponse)
+@router.patch("/users/{user_id}/", response_model=schemas.UserResponse)
 def update_user(
     user_id: int,
     user_update: schemas.UserUpdate,
@@ -77,7 +62,6 @@ def update_user(
     if user_update.username:
         user.username = user_update.username
     if user_update.email:
-        # Ensure email is unique
         existing = db.query(models.User).filter(
             models.User.email == user_update.email, models.User.id != user_id
         ).first()
@@ -85,7 +69,9 @@ def update_user(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
         user.email = user_update.email
     if user_update.password:
-        user.password_hash = utils.hash_password(user_update.password)
+        user.password_hash = auth.hash_password(user_update.password)
+    if user_update.role:
+        user.role = user_update.role
 
     db.commit()
     db.refresh(user)
@@ -93,70 +79,57 @@ def update_user(
 
 
 # --------------------------
-# Delete User
+# Withdrawals (Admin actions)
 # --------------------------
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(
-    user_id: int,
+@router.post("/withdrawals/admin/approve/{withdrawal_id}/")
+def approve_withdrawal(
+    withdrawal_id: int,
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    db.delete(user)
+    withdrawal = db.query(models.Withdrawal).filter(models.Withdrawal.id == withdrawal_id).first()
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Withdrawal not found")
+    withdrawal.status = "approved"
     db.commit()
-    return None
+    return {"message": "Withdrawal approved", "status": "approved"}
 
 
-# --------------------------
-# Referral Analytics (Admin only)
-# --------------------------
-@router.get("/referrals/analytics", response_model=schemas.ReferralAnalytics)
-def referral_analytics(
+@router.post("/withdrawals/admin/deny/{withdrawal_id}/")
+def deny_withdrawal(
+    withdrawal_id: int,
+    reason: str,
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    total_users = db.query(models.User).count()
-    total_referrals = db.query(models.User).filter(models.User.parent_referral.isnot(None)).count()
-    top_referrer = (
-        db.query(models.User.username, db.func.count(models.User.id).label("ref_count"))
-        .join(models.User, models.User.parent_referral == models.User.referral_code, isouter=True)
-        .group_by(models.User.username)
-        .order_by(db.desc("ref_count"))
-        .first()
-    )
-
-    return schemas.ReferralAnalytics(
-        total_users=total_users,
-        total_referrals=total_referrals,
-        top_referrer=top_referrer[0] if top_referrer else None,
-        top_referrals=top_referrer[1] if top_referrer else 0,
-    )
+    withdrawal = db.query(models.Withdrawal).filter(models.Withdrawal.id == withdrawal_id).first()
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Withdrawal not found")
+    withdrawal.status = "denied"
+    db.commit()
+    return {"message": "Withdrawal denied", "status": "denied", "reason": reason}
 
 
 # --------------------------
-# Referral List (Admin only)
+# KYC (Admin actions)
 # --------------------------
-@router.get("/referrals/list", response_model=List[schemas.ReferralListResponse])
-def referral_list(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
+@router.get("/kyc/admin/list/", response_model=List[schemas.KycRequestResponse])
+def list_kyc_requests(
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    users = db.query(models.User).offset(skip).limit(limit).all()
+    return db.query(models.KycRequest).all()
 
-    response = []
-    for user in users:
-        response.append(
-            schemas.ReferralListResponse(
-                id=user.id,
-                username=user.username,
-                email=user.email,
-                referral_code=user.referral_code,
-                referred_count=len(user.referrals)
-            )
-        )
-    return response
+
+@router.post("/kyc/admin/process/")
+def process_kyc(
+    request: schemas.KycProcessRequest,
+    db: Session = Depends(database.get_db),
+    admin=Depends(auth.get_admin_user)
+):
+    kyc = db.query(models.KycRequest).filter(models.KycRequest.id == request.userId).first()
+    if not kyc:
+        raise HTTPException(status_code=404, detail="KYC request not found")
+    kyc.status = "approved" if request.action == "approve" else "rejected"
+    db.commit()
+    return {"success": True}

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
+
 # ---------- User Schemas ----------
 
 class UserBase(BaseModel):
@@ -45,7 +46,7 @@ class Login(BaseModel):
 
 class TokenResponse(BaseModel):
     access: str              # 🔑 frontend expects "access", not "access_token"
-    refresh: Optional[str]   # placeholder, can implement refresh later
+    refresh: Optional[str]   # frontend expects this field
     role: str                # include role so frontend knows if admin/user immediately
 
 
@@ -73,3 +74,54 @@ class ReferralListResponse(BaseModel):
     page: int
     size: int
     referrals: List[TeamMember]
+
+
+# ---------- Withdrawals ----------
+
+class WithdrawalBase(BaseModel):
+    amount: str
+    bank_name: str
+    account_number: str
+    account_name: str
+
+
+class WithdrawalCreate(WithdrawalBase):
+    pass
+
+
+class WithdrawalResponse(WithdrawalBase):
+    id: int
+    status: str
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- KYC ----------
+
+class KycRequestBase(BaseModel):
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    country: Optional[str] = None
+    document_url: Optional[str] = None
+
+
+class KycRequestCreate(KycRequestBase):
+    pass
+
+
+class KycRequestResponse(KycRequestBase):
+    id: int
+    user_id: int
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class KycProcessRequest(BaseModel):
+    userId: int
+    action: str   # "approve" or "reject"
+    reason: Optional[str] = None
