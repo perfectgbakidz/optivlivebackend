@@ -54,7 +54,7 @@ def create_user(
         password_hash=auth.hash_password(user.password),
         referral_code=new_code,
         parent_referral=user.referral_code if user.referral_code else None,
-        role=user.role if user.role else "user"
+        role=user.role if user.role else "user"  # ✅ default handled
     )
     db.add(new_user)
     db.commit()
@@ -134,7 +134,7 @@ def approve_withdrawal(
 @router.post("/withdrawals/{withdrawal_id}/deny/")
 def deny_withdrawal(
     withdrawal_id: int,
-    reason: str,
+    request: schemas.WithdrawalDenyRequest,   # ✅ Use schema instead of raw str
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
@@ -143,7 +143,7 @@ def deny_withdrawal(
         raise HTTPException(status_code=404, detail="Withdrawal not found")
     withdrawal.status = "denied"
     db.commit()
-    return {"message": "Withdrawal denied", "status": "denied", "reason": reason}
+    return {"message": "Withdrawal denied", "status": "denied", "reason": request.reason}
 
 
 # --------------------------

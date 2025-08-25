@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+from datetime import datetime
 
 
 # ---------- User Schemas ----------
@@ -11,7 +12,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    referral_code: Optional[str]  # optional if admin creates, required if user registers
+    referral_code: Optional[str] = None  # optional if admin creates, required if user registers
+    role: str = "user"                   # ✅ default to "user"
 
 
 class UserUpdate(BaseModel):
@@ -142,9 +144,12 @@ class TransactionResponse(BaseModel):
     id: int
     user_id: int
     type: str          # e.g., "deposit", "withdrawal", "referral_bonus"
-    amount: str
+    amount: float      # ✅ changed from str → float
     status: str
-    created_at: str    # assuming stored as string/datetime
+    created_at: datetime   # ✅ changed from str → datetime
 
     class Config:
         from_attributes = True
+        
+class WithdrawalDenyRequest(BaseModel):
+    reason: Optional[str] = None
