@@ -20,7 +20,7 @@ origins = [
 # ✅ Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,          # change to origins if you want restricted access
+    allow_origins=["*"],          # change to origins if you want restricted access
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
