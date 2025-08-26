@@ -1,30 +1,38 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import auth, users, admin
 from . import models, database
+from .routers import auth, users, admin, withdrawals, kyc, transactions, dashboard,team
 
+# ✅ Initialize database tables
 models.Base.metadata.create_all(bind=database.engine)
+
 
 app = FastAPI(title="Optivus Backend")
 
-# ✅ Allowed origins (no trailing slashes!)
+# ✅ Allowed origins
 origins = [
     "https://optivlive.onrender.com",   # backend (if needed)
     "https://optivlive.vercel.app",     # frontend
-    "http://localhost:3000",
-    "http://localhost:5173"            # local dev
+    "http://localhost:3000",            # local React dev
+    "http://localhost:5173"             # local Vite dev
 ]
 
+# ✅ Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # or ["*"] if you want all origins
-    allow_credentials=True,
-    allow_methods=["*"],         # allow GET, POST, PUT, etc.
+    allow_origins=["*"],          # change to origins if you want restricted access
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
 
-# Include Routers
+# ✅ Routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(admin.router)
+app.include_router(withdrawals.router)
+app.include_router(kyc.router)
+app.include_router(transactions.router)
+app.include_router(dashboard.router)
+app.include_router(team.router)

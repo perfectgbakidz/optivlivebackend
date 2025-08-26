@@ -19,20 +19,21 @@ class User(Base):
 
     role = Column(String, default="user")  # "user" or "admin"
 
-    # ✅ New fields the frontend expects
+    # ✅ Fields required by frontend
     is_kyc_verified = Column(Boolean, default=False)
-    balance = Column(String, default="0.00")  # stored as string for consistency with frontend
+    balance = Column(String, default="0.00")  # keep as string for consistency
     firstName = Column(String, nullable=True)
     lastName = Column(String, nullable=True)
+    hasPin = Column(Boolean, default=False)
+    pin_hash = Column(String, nullable=True)
+    is2faEnabled = Column(Boolean, default=False)
 
-    # Relationship to see who was referred by this user
+    # Referral tracking
     referrals = relationship(
         "User",
         backref="referrer",
         remote_side=[referral_code]
     )
-
-    # Referral analytics fields
     referral_clicks = Column(Integer, default=0)
     referral_signups = Column(Integer, default=0)
     total_commission = Column(Float, default=0.0)
@@ -52,11 +53,17 @@ class Withdrawal(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    amount = Column(String, nullable=False)  # store as string for consistency with frontend
+
+    # Amounts
+    amount = Column(String, nullable=False)       # amount user receives (after fees)
+    fee = Column(String, default="0.00")          # fee charged
+
+    # Bank details
     bank_name = Column(String, nullable=False)
     account_number = Column(String, nullable=False)
     account_name = Column(String, nullable=False)
-    status = Column(String, default="pending")  # pending | approved | denied
+
+    status = Column(String, default="pending")    # pending | approved | denied | paid
 
     user = relationship("User", back_populates="withdrawals")
 
@@ -68,8 +75,9 @@ class KycRequest(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     status = Column(String, default="pending")  # pending | approved | rejected
     document_url = Column(String, nullable=True)
+    rejection_reason = Column(String, nullable=True)  # ✅ added for admin rejection
 
-    # extra details
+    # Extra details
     address = Column(String, nullable=True)
     city = Column(String, nullable=True)
     postal_code = Column(String, nullable=True)
@@ -83,8 +91,10 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    type = Column(String, nullable=False)   # deposit | withdrawal | referral_bonus | etc.
-    amount = Column(Float, nullable=False)
+
+    type = Column(String, nullable=False)   # withdrawal | deposit | commission | etc
+    reference = Column(String, nullable=True)  # ✅ description / tracking reference
+    amount = Column(String, nullable=False)    # keep as string for consistency
     status = Column(String, default="pending")  # pending | completed | failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

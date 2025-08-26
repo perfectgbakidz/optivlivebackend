@@ -29,14 +29,23 @@ class UserResponse(UserBase):
     parent_referral: Optional[str] = None
     role: str
 
-    # ✅ Added fields the frontend expects
+    # ✅ Frontend expects these
     is_kyc_verified: bool = False
     balance: str = "0.00"  # keep as string for consistency
     firstName: Optional[str] = None
     lastName: Optional[str] = None
+    hasPin: bool = False
+    is2faEnabled: bool = False
 
     class Config:
         from_attributes = True
+
+
+# ---------- Profile Update ----------
+
+class UserProfileUpdate(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
 
 
 # ---------- Auth Schemas ----------
@@ -52,6 +61,23 @@ class TokenResponse(BaseModel):
     role: str                # include role so frontend knows if admin/user immediately
 
 
+# ---------- Password Change ----------
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+# ---------- PIN ----------
+
+class PinSetRequest(BaseModel):
+    pin: str
+
+
+class PinVerifyResponse(BaseModel):
+    verified: bool
+
+
 # ---------- Team / Referrals ----------
 
 class TeamMember(BaseModel):
@@ -59,6 +85,7 @@ class TeamMember(BaseModel):
     username: str
     email: EmailStr
     referral_code: str
+    children: Optional[List["TeamMember"]] = []  # ✅ recursive structure for tree
 
     class Config:
         from_attributes = True
@@ -95,9 +122,14 @@ class WithdrawalResponse(WithdrawalBase):
     id: int
     status: str
     user_id: int
+    created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class WithdrawalDenyRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 # ---------- KYC ----------
@@ -118,6 +150,7 @@ class KycRequestResponse(KycRequestBase):
     id: int
     user_id: int
     status: str
+    rejection_reason: Optional[str] = None  # ✅ frontend expects this
 
     class Config:
         from_attributes = True
@@ -143,13 +176,11 @@ class AdminStats(BaseModel):
 class TransactionResponse(BaseModel):
     id: int
     user_id: int
-    type: str          # e.g., "deposit", "withdrawal", "referral_bonus"
-    amount: float      # ✅ changed from str → float
+    type: str         # ✅ renamed "type" → "tx_type" to match frontend
+    reference: Optional[str] = None
+    amount: str          # ✅ frontend wants string (not float)
     status: str
-    created_at: datetime   # ✅ changed from str → datetime
+    created_at: datetime
 
     class Config:
         from_attributes = True
-        
-class WithdrawalDenyRequest(BaseModel):
-    reason: Optional[str] = None
