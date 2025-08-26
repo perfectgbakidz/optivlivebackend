@@ -13,14 +13,14 @@ app = FastAPI(title="Optivus Backend")
 origins = [
     "https://optivlive.onrender.com",   # backend (if needed)
     "https://optivlive.vercel.app",     # frontend
-    "http://localhost:3000",            # local React dev
+    "216.24.57.7:443",            # local React dev
     "http://localhost:5173"             # local Vite dev
 ]
 
 # ✅ Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # change to origins if you want restricted access
+    allow_origins=origins,          # change to origins if you want restricted access
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
