@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -6,46 +6,62 @@ from datetime import datetime
 # ---------- User Schemas ----------
 
 class UserBase(BaseModel):
-    username: str
+    first_name: str
+    last_name: str
     email: EmailStr
+    phone: Optional[str] = None
 
 
 class UserCreate(UserBase):
     password: str
-    referral_code: Optional[str] = None  # optional if admin creates, required if user registers
-    role: str = "user"                   # ✅ default to "user"
+    referral_code: Optional[str] = None
+    role: str = "user"
 
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    phone: Optional[str] = None
     password: Optional[str] = None
-    role: Optional[str] = None  # allow admin to update role
+    role: Optional[str] = None
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
-    referral_code: Optional[str] = None
-    parent_referral: Optional[str] = None
+    first_name: str
+    last_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    referral_code: str
+    referred_by: Optional[int] = None
     role: str
 
     # ✅ Frontend expects these
     is_kyc_verified: bool = False
-    balance: str = "0.00"  # keep as string for consistency
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
+    balance: float = 0.00
     hasPin: bool = False
     is2faEnabled: bool = False
 
+    # ✅ Admin control fields
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
     class Config:
         from_attributes = True
+        populate_by_name = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
 
 
 # ---------- Profile Update ----------
 
 class UserProfileUpdate(BaseModel):
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
 
 
 # ---------- Auth Schemas ----------
@@ -56,9 +72,9 @@ class Login(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access: str              # 🔑 frontend expects "access", not "access_token"
-    refresh: Optional[str]   # frontend expects this field
-    role: str                # include role so frontend knows if admin/user immediately
+    access: str
+    refresh: Optional[str]
+    role: str
 
 
 # ---------- Password Change ----------
@@ -82,33 +98,20 @@ class PinVerifyResponse(BaseModel):
 
 class TeamMember(BaseModel):
     id: int
-    username: str
+    first_name: str
+    last_name: str
     email: EmailStr
     referral_code: str
-    children: Optional[List["TeamMember"]] = []  # ✅ recursive structure for tree
+    children: List["TeamMember"] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
 
 
-class ReferralAnalytics(BaseModel):
-    total_referrals: int
-    active_referrals: int
-    pending_referrals: int
-    conversion_rate: float
-
-
-class ReferralListResponse(BaseModel):
-    total: int
-    page: int
-    size: int
-    referrals: List[TeamMember]
-
-
 # ---------- Withdrawals ----------
 
 class WithdrawalBase(BaseModel):
-    amount: str
+    amount: float
     bank_name: str
     account_number: str
     account_name: str
@@ -118,14 +121,19 @@ class WithdrawalCreate(WithdrawalBase):
     pass
 
 
-class WithdrawalResponse(WithdrawalBase):
+class WithdrawalResponse(BaseModel):
     id: int
-    status: str
     user_id: int
-    created_at: datetime
+    amount: float
+    bank_name: str
+    account_number: str
+    account_name: str
+    status: str
+    date: datetime = Field(..., alias="created_at")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class WithdrawalDenyRequest(BaseModel):
@@ -146,18 +154,27 @@ class KycRequestCreate(KycRequestBase):
     pass
 
 
-class KycRequestResponse(KycRequestBase):
+class KycRequestResponse(BaseModel):
     id: int
-    user_id: int
+    userId: int = Field(..., alias="user_id")
+    first_name: str = Field(..., alias="user.first_name")
+    last_name: str = Field(..., alias="user.last_name")
+    userEmail: str = Field(..., alias="user.email")
+    dateSubmitted: datetime = Field(..., alias="created_at")
+    address: Optional[str] = None
+    city: Optional[str] = None
+    postalCode: Optional[str] = Field(None, alias="postal_code")
+    country: Optional[str] = None
+    documentUrl: Optional[str] = Field(None, alias="document_url")
     status: str
-    rejection_reason: Optional[str] = None  # ✅ frontend expects this
+    rejection_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class KycProcessRequest(BaseModel):
-    userId: int
     action: str   # "approve" or "reject"
     reason: Optional[str] = None
 
@@ -165,22 +182,28 @@ class KycProcessRequest(BaseModel):
 # ---------- Admin Stats ----------
 
 class AdminStats(BaseModel):
-    total_users: int
-    total_user_referral_earnings: float
-    pending_withdrawals_count: int
-    protocol_balance: float
+    totalUsers: int
+    totalUserReferralEarnings: float
+    pendingWithdrawalsCount: int
+    protocolBalance: float
 
 
 # ---------- Transactions ----------
 
+class TransactionUser(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+
+
 class TransactionResponse(BaseModel):
     id: int
     user_id: int
-    type: str         # ✅ renamed "type" → "tx_type" to match frontend
-    reference: Optional[str] = None
-    amount: str          # ✅ frontend wants string (not float)
+    type: str
+    amount: float
     status: str
     created_at: datetime
+    user: TransactionUser
 
     class Config:
         from_attributes = True

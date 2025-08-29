@@ -6,6 +6,7 @@ from .. import models, schemas, utils, database, auth
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
+
 # --------------------------
 # Admin Stats
 # --------------------------
@@ -26,10 +27,10 @@ def get_admin_stats(
     )
 
     return {
-        "total_users": total_users,
-        "total_user_referral_earnings": total_user_referral_earnings,
-        "pending_withdrawals_count": pending_withdrawals_count,
-        "protocol_balance": protocol_balance,
+        "totalUsers": total_users,
+        "totalUserReferralEarnings": total_user_referral_earnings,
+        "pendingWithdrawalsCount": pending_withdrawals_count,
+        "protocolBalance": protocol_balance,
     }
 
 
@@ -54,7 +55,7 @@ def create_user(
         password_hash=auth.hash_password(user.password),
         referral_code=new_code,
         parent_referral=user.referral_code if user.referral_code else None,
-        role=user.role if user.role else "user"  # ✅ default handled
+        role=user.role if user.role else "user"
     )
     db.add(new_user)
     db.commit()
@@ -101,6 +102,14 @@ def update_user(
     if user_update.role:
         user.role = user_update.role
 
+    # ✅ Allow admin to update additional fields
+    if hasattr(user_update, "balance") and user_update.balance:
+        user.balance = user_update.balance
+    if hasattr(user_update, "status") and user_update.status:
+        user.status = user_update.status
+    if hasattr(user_update, "withdrawalStatus") and user_update.withdrawalStatus:
+        user.withdrawalStatus = user_update.withdrawalStatus
+
     db.commit()
     db.refresh(user)
     return user
@@ -114,7 +123,13 @@ def admin_list_withdrawals(
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    return db.query(models.Withdrawal).all()
+    withdrawals = db.query(models.Withdrawal).filter(models.Withdrawal.status == "pending").all()
+
+    # ✅ Mask account number
+    for wd in withdrawals:
+        if wd.account_number:
+            wd.account_number = "****" + wd.account_number[-4:]
+    return withdrawals
 
 
 @router.post("/withdrawals/{withdrawal_id}/approve/")
@@ -128,13 +143,13 @@ def approve_withdrawal(
         raise HTTPException(status_code=404, detail="Withdrawal not found")
     withdrawal.status = "approved"
     db.commit()
-    return {"message": "Withdrawal approved", "status": "approved"}
+    return {"message": "Withdrawal approved successfully.", "status": "approved"}
 
 
 @router.post("/withdrawals/{withdrawal_id}/deny/")
 def deny_withdrawal(
     withdrawal_id: int,
-    request: schemas.WithdrawalDenyRequest,   # ✅ Use schema instead of raw str
+    request: schemas.WithdrawalDenyRequest,
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
@@ -143,7 +158,7 @@ def deny_withdrawal(
         raise HTTPException(status_code=404, detail="Withdrawal not found")
     withdrawal.status = "denied"
     db.commit()
-    return {"message": "Withdrawal denied", "status": "denied", "reason": request.reason}
+    return {"message": "Withdrawal denied.", "status": "denied", "reason": request.reason}
 
 
 # --------------------------
@@ -154,7 +169,25 @@ def list_kyc_requests(
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    return db.query(models.KycRequest).all()
+    kycs = db.query(models.KycRequest).filter(models.KycRequest.status == "pending").all()
+
+    return [
+        schemas.KycRequestResponse(
+            id=kyc.id,
+            userId=kyc.user_id,
+            userName=kyc.user.username,
+            userEmail=kyc.user.email,
+            dateSubmitted=kyc.created_at,
+            address=kyc.address,
+            city=kyc.city,
+            postal_code=kyc.postal_code,
+            country=kyc.country,
+            documentUrl=kyc.document_url,
+            status=kyc.status,
+            rejection_reason=kyc.rejection_reason,
+        )
+        for kyc in kycs
+    ]
 
 
 @router.post("/kyc/process/{id}/")
@@ -168,6 +201,8 @@ def process_kyc(
     if not kyc:
         raise HTTPException(status_code=404, detail="KYC request not found")
     kyc.status = "approved" if request.action == "approve" else "rejected"
+    if request.action == "reject" and request.reason:
+        kyc.rejection_reason = request.reason
     db.commit()
     return {"success": True}
 
@@ -180,4 +215,19 @@ def admin_list_transactions(
     db: Session = Depends(database.get_db),
     admin=Depends(auth.get_admin_user)
 ):
-    return db.query(models.Transaction).all()
+    transactions = db.query(models.Transaction).all()
+    return [
+        schemas.TransactionResponse(
+            id=tx.id,
+            user_id=tx.user_id,
+            type=tx.type,
+            amount=float(tx.amount),
+            status=tx.status,
+            created_at=tx.created_at,
+            user=schemas.TransactionUser(
+                name=tx.user.username,
+                email=tx.user.email
+            ),
+        )
+        for tx in transactions
+    ]
