@@ -1,33 +1,29 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 
-from .. import models, schemas, database, auth
+from app.schemas.transaction_schemas import TransactionResponse
+from app.services import transaction_service
+from app.dependencies import get_current_user
+from app.database import get_db
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 
-# --------------------------
-# Get all user transactions
-# --------------------------
-@router.get("/", response_model=List[schemas.TransactionResponse])
-def get_transactions(
-    db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-    status: Optional[str] = Query(None, description="Filter by status: pending | completed | failed"),
-    tx_type: Optional[str] = Query(None, description="Filter by transaction type: withdrawal | deposit | referral_bonus")
+@router.get("/", response_model=List[TransactionResponse])
+async def list_transactions(
+    user=Depends(get_current_user),
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Returns all transactions for the logged-in user.
-    Supports optional filtering by status and tx_type.
-    """
+    return await transaction_service.list_transactions(user, page, page_size, db)
 
-    query = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id)
 
-    if status:
-        query = query.filter(models.Transaction.status == status)
-    if tx_type:
-        query = query.filter(models.Transaction.tx_type == tx_type)
-
-    transactions = query.order_by(models.Transaction.created_at.desc()).all()
-    return transactions
+@router.get("/{transaction_id}/", response_model=TransactionResponse)
+async def get_transaction(
+    transaction_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await transaction_service.get_transaction(user, transaction_id, db)
