@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 
@@ -11,6 +11,20 @@ class LoginRequest(BaseModel):
     password: str
 
 
+# 🚀 NEW → Step 1: Initiate Registration (before payment)
+class InitiateRegistrationRequest(BaseModel):
+    first_name: str = Field(..., alias="firstName")
+    last_name: str = Field(..., alias="lastName")
+    username: str
+    email: EmailStr
+    password: str
+    referral_code: Optional[str] = Field(None, alias="referralCode")
+
+    class Config:
+        populate_by_name = True   # allow both snake_case & camelCase
+
+
+# ✅ Keep old RegisterRequest (optional if still used elsewhere)
 class RegisterRequest(BaseModel):
     email: EmailStr
     username: str
@@ -46,3 +60,11 @@ class TokenResponse(BaseModel):
 class TwoFARequiredResponse(BaseModel):
     two_factor_required: bool = True
     user_id: str
+
+
+# 🚀 NEW → Step 1 Response (return Stripe client_secret)
+class InitiateRegistrationResponse(BaseModel):
+    client_secret: str = Field(..., alias="clientSecret")
+
+    class Config:
+        populate_by_name = True

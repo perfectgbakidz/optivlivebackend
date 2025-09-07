@@ -7,7 +7,7 @@ from typing import List
 
 from app.database import get_db
 from app.schemas.withdrawal_schemas import WithdrawalCreateRequest, WithdrawalResponse
-from app.utils.stripe_handler import create_payout
+from app.utils.stripe_client import create_payout
 
 
 # -----------------------------

@@ -1,19 +1,31 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from uuid import uuid4
-from datetime import timedelta
+from datetime import datetime, timedelta
+import stripe
 
 from app.schemas.auth_schemas import (
-    LoginRequest, RegisterRequest, TwoFAVerifyRequest,
-    PasswordResetRequest, PasswordResetConfirmRequest,
-    TokenResponse, TwoFARequiredResponse
+    LoginRequest,
+    InitiateRegistrationRequest,
+    InitiateRegistrationResponse,
+    TwoFAVerifyRequest,
+    PasswordResetRequest,
+    PasswordResetConfirmRequest,
+    TokenResponse,
+    TwoFARequiredResponse,
 )
 from app.database import get_db
 from app.utils.security import hash_password, verify_password
 from app.utils.jwt_handler import create_access_token, create_refresh_token
 from app.utils.common import generate_referral_code
 from app.config import settings
+
+
+# -----------------------------
+# STRIPE INIT
+# -----------------------------
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 # -----------------------------
@@ -24,17 +36,13 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(query, {"email": payload.email})
     user = result.fetchone()
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    if not verify_password(payload.password, user.password_hash):
+    if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # If 2FA is enabled, require second step
     if user.is_2fa_enabled:
         return TwoFARequiredResponse(two_factor_required=True, user_id=str(user.id))
 
-    # Otherwise, issue tokens
     token_data = {
         "sub": str(user.id),
         "email": user.email,
@@ -44,70 +52,60 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     access = create_access_token(token_data, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     refresh = create_refresh_token(token_data)
 
-    return TokenResponse(
-        access=access,
-        refresh=refresh
-    )
+    return TokenResponse(access=access, refresh=refresh)
 
 
 # -----------------------------
-# REGISTER
+# INITIATE REGISTRATION (Step 1)
 # -----------------------------
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Check if email/username already exists
+async def initiate_registration(
+    payload: InitiateRegistrationRequest, db: AsyncSession = Depends(get_db)
+):
+    # Check if email/username already exists in users
     query = text("SELECT 1 FROM users WHERE email = :email OR username = :username LIMIT 1")
     result = await db.execute(query, {"email": payload.email, "username": payload.username})
-    existing = result.fetchone()
-    if existing:
+    if result.fetchone():
         raise HTTPException(status_code=400, detail="Email or username already exists")
 
+    # Check if already pending
+    pending_query = text("SELECT 1 FROM pending_registrations WHERE email = :email LIMIT 1")
+    result = await db.execute(pending_query, {"email": payload.email})
+    if result.fetchone():
+        raise HTTPException(status_code=400, detail="A pending registration already exists for this email")
+
+    # Hash password & prepare pending registration
     hashed_pw = hash_password(payload.password)
-    referral_code = generate_referral_code()
+    pending_id = str(uuid4())
+    expires_at = datetime.utcnow() + timedelta(minutes=30)
 
-    user_id = str(uuid4())
-
-    insert_query = text("""
-        INSERT INTO users (
-            id, email, username, password_hash, first_name, last_name,
-            referral_code, referred_by_code,
-            role, status, withdrawal_status, balance,
-            is_kyc_verified, is_2fa_enabled, has_pin
+    insert_pending = text("""
+        INSERT INTO pending_registrations (
+            id, email, username, hashed_password, first_name, last_name, referrer_code, created_at, expires_at
         )
         VALUES (
-            :id, :email, :username, :password_hash, :first_name, :last_name,
-            :referral_code, :referred_by_code,
-            'user', 'active', 'active', '0.00',
-            false, false, false
+            :id, :email, :username, :hashed_password, :first_name, :last_name, :referrer_code, NOW(), :expires_at
         )
     """)
-
-    await db.execute(insert_query, {
-        "id": user_id,
+    await db.execute(insert_pending, {
+        "id": pending_id,
         "email": payload.email,
         "username": payload.username,
-        "password_hash": hashed_pw,
+        "hashed_password": hashed_pw,
         "first_name": payload.first_name,
         "last_name": payload.last_name,
-        "referral_code": referral_code,
-        "referred_by_code": payload.referral_code if payload.referral_code else None,
+        "referrer_code": payload.referral_code,
+        "expires_at": expires_at
     })
     await db.commit()
 
-    # 🚀 TODO: If payload.referral_code is valid, apply referral bonus logic here.
-
-    token_data = {
-        "sub": user_id,
-        "email": payload.email,
-        "username": payload.username,
-        "role": "user",
-    }
-    access = create_access_token(token_data, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh = create_refresh_token(token_data)
-
-    return TokenResponse(
-        access=access,
-        refresh=refresh
+    # Create Stripe PaymentIntent
+    payment_intent = stripe.PaymentIntent.create(
+        amount=5000,  # £50.00 in pence
+        currency="gbp",
+        metadata={"pending_registration_id": pending_id},
     )
+
+    return InitiateRegistrationResponse(client_secret=payment_intent.client_secret)
 
 
 # -----------------------------
@@ -119,14 +117,11 @@ async def verify_2fa(payload: TwoFAVerifyRequest, db: AsyncSession = Depends(get
         "sub": payload.user_id,
         "email": "dummy@example.com",
         "username": "dummy",
-        "role": "user"
+        "role": "user",
     }
     access = create_access_token(token_data, timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     refresh = create_refresh_token(token_data)
-    return TokenResponse(
-        access=access,
-        refresh=refresh
-    )
+    return TokenResponse(access=access, refresh=refresh)
 
 
 # -----------------------------

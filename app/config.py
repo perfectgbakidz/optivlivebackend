@@ -2,19 +2,31 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # -----------------------------
     # Database
+    # -----------------------------
     DATABASE_URL: str
 
+    # -----------------------------
     # JWT
+    # -----------------------------
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Stripe
-    STRIPE_SECRET_KEY: str = "sk_test_dummy"
-    STRIPE_WEBHOOK_SECRET: str = ""
 
+    MASTER_REFERRAL_CODE: str = "MASTERKEY"
+    
+    # -----------------------------
+    # Stripe
+    # -----------------------------
+    STRIPE_SECRET_KEY: str  # e.g. "sk_test_..."
+    STRIPE_WEBHOOK_SECRET: str  # from Stripe dashboard
+
+    # -----------------------------
+    # Supabase (optional for storage/KYC)
+    # -----------------------------
     supabase_url: str
     supabase_key: str
 
