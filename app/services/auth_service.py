@@ -80,17 +80,17 @@ async def initiate_registration(
 
     insert_pending = text("""
         INSERT INTO pending_registrations (
-            id, email, username, hashed_password, first_name, last_name, referrer_code, created_at, expires_at
+            id, email, username, password_hash, first_name, last_name, referrer_code, created_at, expires_at
         )
         VALUES (
-            :id, :email, :username, :hashed_password, :first_name, :last_name, :referrer_code, NOW(), :expires_at
+            :id, :email, :username, :password_hash, :first_name, :last_name, :referrer_code, NOW(), :expires_at
         )
     """)
     await db.execute(insert_pending, {
         "id": pending_id,
         "email": payload.email,
         "username": payload.username,
-        "hashed_password": hashed_pw,
+        "password_hash": hashed_pw,
         "first_name": payload.first_name,
         "last_name": payload.last_name,
         "referrer_code": payload.referral_code,

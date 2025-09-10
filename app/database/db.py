@@ -10,7 +10,7 @@ load_dotenv()
 
 DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise ValueError("❌ DATABASE_URL is not set in the environment.")
+    raise ValueError(" DATABASE_URL is not set in the environment.")
 
 # Ensure async driver is used
 if DATABASE_URL.startswith("postgresql+psycopg2"):

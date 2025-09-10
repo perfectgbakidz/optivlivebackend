@@ -45,7 +45,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     if not sig_header:
         raise HTTPException(status_code=400, detail="Missing Stripe signature")
 
-    # ✅ delegate to webhook_service, not auth_service
+    #  delegate to webhook_service, not auth_service
     return await webhook_service.handle_stripe_webhook(raw_body, sig_header, db)
 
 
