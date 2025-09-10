@@ -76,14 +76,19 @@ async def initiate_registration(
     # Hash password & prepare pending registration
     hashed_pw = hash_password(payload.password)
     pending_id = str(uuid4())
-    expires_at = datetime.utcnow() + timedelta(minutes=30)
+
+    # Use Python for consistency (avoid DB timezone mismatch)
+    created_at = datetime.utcnow()
+    expires_at = created_at + timedelta(minutes=30)
 
     insert_pending = text("""
         INSERT INTO pending_registrations (
-            id, email, username, password_hash, first_name, last_name, referrer_code, created_at, expires_at
+            id, email, username, password_hash, first_name, last_name, referrer_code,
+            status, created_at, expires_at
         )
         VALUES (
-            :id, :email, :username, :password_hash, :first_name, :last_name, :referrer_code, NOW(), :expires_at
+            :id, :email, :username, :password_hash, :first_name, :last_name,
+            :referrer_code, 'pending', :created_at, :expires_at
         )
     """)
     await db.execute(insert_pending, {
@@ -94,7 +99,8 @@ async def initiate_registration(
         "first_name": payload.first_name,
         "last_name": payload.last_name,
         "referrer_code": payload.referral_code,
-        "expires_at": expires_at
+        "created_at": created_at,
+        "expires_at": expires_at,
     })
     await db.commit()
 
@@ -105,7 +111,21 @@ async def initiate_registration(
         metadata={"pending_registration_id": pending_id},
     )
 
+    # Update pending registration with PaymentIntent ID
+    update_query = text("""
+        UPDATE pending_registrations
+        SET stripe_payment_intent_id = :pi_id, updated_at = :updated_at
+        WHERE id = :id
+    """)
+    await db.execute(update_query, {
+        "pi_id": payment_intent.id,
+        "updated_at": datetime.utcnow(),
+        "id": pending_id,
+    })
+    await db.commit()
+
     return InitiateRegistrationResponse(client_secret=payment_intent.client_secret)
+
 
 
 # -----------------------------
