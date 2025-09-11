@@ -58,7 +58,7 @@ async def handle_stripe_webhook(request: Request, db: AsyncSession):
         "id": user_id,
         "email": pending.email,
         "username": pending.username,
-        "password_hash": pending.hashed_password,
+        "password_hash": pending.password_hashed,
         "first_name": pending.first_name,
         "last_name": pending.last_name,
         "referral_code": referral_code,
