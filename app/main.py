@@ -11,6 +11,7 @@ from app.routers import (
     public,
     team,
     dashboard,
+    webhook_router,  # 👈 Import webhook router
 )
 
 app = FastAPI(
@@ -46,7 +47,8 @@ app.include_router(withdrawals.router)
 app.include_router(admin.router)
 app.include_router(dashboard.router)
 app.include_router(public.router)
-app.include_router(team.router)  # 👈 NEW line
+app.include_router(team.router)
+app.include_router(webhook_router.router)  # 👈 Add webhook routes
 
 @app.get("/")
 async def root():
