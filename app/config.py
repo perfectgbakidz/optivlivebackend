@@ -15,9 +15,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-
+    # -----------------------------
+    # Referrals
+    # -----------------------------
     MASTER_REFERRAL_CODE: str = "MASTERKEY"
-    
+
     # -----------------------------
     # Stripe
     # -----------------------------
@@ -29,6 +31,11 @@ class Settings(BaseSettings):
     # -----------------------------
     supabase_url: str
     supabase_key: str
+
+    # -----------------------------
+    # Debug / Environment
+    # -----------------------------
+    DEBUG: bool = True   # 👈 NEW
 
     class Config:
         env_file = ".env"
