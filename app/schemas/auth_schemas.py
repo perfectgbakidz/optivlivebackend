@@ -18,20 +18,20 @@ class InitiateRegistrationRequest(BaseModel):
     username: str
     email: EmailStr
     password: str
-    referral_code: Optional[str] = Field(None, alias="referralCode")
+    referred_by_code: Optional[str] = Field(None, alias="referredByCode")  # 👈 updated
 
     class Config:
         populate_by_name = True   # allow both snake_case & camelCase
 
 
-# ✅ Keep old RegisterRequest (optional if still used elsewhere)
+# ✅ Legacy RegisterRequest (if still used elsewhere)
 class RegisterRequest(BaseModel):
     email: EmailStr
     username: str
     password: str
     first_name: str
     last_name: str
-    referral_code: Optional[str] = None
+    referred_by_code: Optional[str] = None  # 👈 updated
 
 
 class TwoFAVerifyRequest(BaseModel):

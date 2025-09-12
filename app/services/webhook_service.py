@@ -101,8 +101,8 @@ async def handle_stripe_webhook(request: Request, db: AsyncSession):
             "password_hash": pending._mapping["password_hash"],
             "first_name": pending._mapping["first_name"],
             "last_name": pending._mapping["last_name"],
-            "referral_code": referral_code,                     # 🎯 new code
-            "referred_by_code": pending._mapping["referrer_code"],  # 🎯 inviter’s code
+            "referral_code": referral_code,                          # 🎯 new unique code for user
+            "referred_by_code": pending._mapping["referred_by_code"],  # 🎯 inviter’s code
         }
 
         await db.execute(insert_user, params)
@@ -112,7 +112,7 @@ async def handle_stripe_webhook(request: Request, db: AsyncSession):
         signup_fee = 50
         await distribute_signup_bonus(
             new_user_id=user_id,
-            referrer_code=pending._mapping["referrer_code"],
+            referrer_code=pending._mapping["referred_by_code"],  # 👈 fixed
             signup_fee=signup_fee,
             db=db
         )
