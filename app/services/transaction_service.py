@@ -1,3 +1,5 @@
+# app/services/transaction_service.py
+
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -8,21 +10,69 @@ from typing import List, Optional
 from app.schemas.transaction_schemas import TransactionResponse
 from app.utils.stripe_client import create_payment_intent
 from app.utils.common import generate_transaction_ref
-from app.config import settings  # ✅ pull MASTER_REFERRAL_CODE from config
+from app.config import settings  # ✅ MASTER_REFERRAL_CODE
 
 
 # -----------------------------
-# LIST USER TRANSACTIONS
+# HELPER: Generic transaction logger
 # -----------------------------
-async def list_transactions(user, page: int, page_size: int, db: AsyncSession) -> List[TransactionResponse]:
-    offset = (page - 1) * page_size
+async def log_transaction(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    type: str,
+    amount: str,
+    currency: str = "usd",
+    status: str = "completed",
+    referee_id: Optional[str] = None,
+    tier: Optional[int] = None,
+    note: Optional[str] = None,
+    commit: bool = True,
+) -> str:
+    """Insert a transaction into the DB and return its ID"""
+    tid = str(uuid4())
+    ref = generate_transaction_ref(type[:3].upper())
+
+    insert_q = text("""
+        INSERT INTO transactions (
+            id, user_id, type, amount, currency, status, reference, created_at,
+            referee_id, tier, note
+        )
+        VALUES (:id, :uid, :type, :amt, :cur, :status, :ref, :dt,
+                :referee, :tier, :note)
+    """)
+
+    await db.execute(insert_q, {
+        "id": tid,
+        "uid": user_id,
+        "type": type,
+        "amt": amount,
+        "cur": currency,
+        "status": status,
+        "ref": ref,
+        "dt": datetime.utcnow(),
+        "referee": referee_id,
+        "tier": tier,
+        "note": note,
+    })
+
+    if commit:
+        await db.commit()
+
+    return tid
+
+
+# -----------------------------
+# LIST USER TRANSACTIONS (limit/offset)
+# -----------------------------
+async def list_transactions(user, limit: int, offset: int, db: AsyncSession) -> List[TransactionResponse]:
     query = text("""
         SELECT * FROM transactions
         WHERE user_id = :uid
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
     """)
-    result = await db.execute(query, {"uid": user["id"], "limit": page_size, "offset": offset})
+    result = await db.execute(query, {"uid": user["id"], "limit": limit, "offset": offset})
     records = result.fetchall()
 
     return [
@@ -81,89 +131,58 @@ async def create_deposit(user, amount: str, currency: str = "usd", db: AsyncSess
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
 
-    tid = str(uuid4())
-    ref = generate_transaction_ref("DEP")
-    insert_q = text("""
-        INSERT INTO transactions (id, user_id, type, amount, currency, status, reference, created_at)
-        VALUES (:id, :uid, 'deposit', :amt, :cur, 'pending', :ref, :dt)
-    """)
-    await db.execute(insert_q, {
-        "id": tid,
-        "uid": user["id"],
-        "amt": amount,
-        "cur": currency,
-        "ref": ref,
-        "dt": datetime.utcnow(),
-    })
-    await db.commit()
+    # Log as pending until Stripe confirms
+    tid = await log_transaction(
+        db,
+        user_id=user["id"],
+        type="deposit",
+        amount=amount,
+        currency=currency,
+        status="pending",
+    )
 
-    return {"client_secret": intent.client_secret, "transaction_id": tid, "reference": ref}
+    return {"client_secret": intent.client_secret, "transaction_id": tid}
 
 
 # -----------------------------
 # LOG WITHDRAWAL (after approval)
 # -----------------------------
 async def log_withdrawal(user_id: str, amount: str, currency: str = "usd", db: AsyncSession = None):
-    tid = str(uuid4())
-    ref = generate_transaction_ref("WDR")
-    insert_q = text("""
-        INSERT INTO transactions (id, user_id, type, amount, currency, status, reference, created_at)
-        VALUES (:id, :uid, 'withdrawal', :amt, :cur, 'completed', :ref, :dt)
-    """)
-    await db.execute(insert_q, {
-        "id": tid,
-        "uid": user_id,
-        "amt": amount,
-        "cur": currency,
-        "ref": ref,
-        "dt": datetime.utcnow(),
-    })
-    await db.commit()
-    return tid
+    return await log_transaction(
+        db,
+        user_id=user_id,
+        type="withdrawal",
+        amount=amount,
+        currency=currency,
+        status="completed",
+    )
 
 
 # -----------------------------
 # LOG REFERRAL BONUS
 # -----------------------------
 async def log_referral_bonus(user_id: str, referee_id: str, amount: str, tier: int, db: AsyncSession = None):
-    tid = str(uuid4())
-    ref = generate_transaction_ref("REF")
-    insert_q = text("""
-        INSERT INTO transactions (id, user_id, type, amount, currency, status, reference, created_at, referee_id, tier)
-        VALUES (:id, :uid, 'referral_bonus', :amt, 'usd', 'completed', :ref, :dt, :referee, :tier)
-    """)
-    await db.execute(insert_q, {
-        "id": tid,
-        "uid": user_id,
-        "amt": amount,
-        "ref": ref,
-        "dt": datetime.utcnow(),
-        "referee": referee_id,
-        "tier": tier,
-    })
-    return tid
+    return await log_transaction(
+        db,
+        user_id=user_id,
+        type="referral_bonus",
+        amount=amount,
+        referee_id=referee_id,
+        tier=tier,
+    )
 
 
 # -----------------------------
 # LOG ADMIN CREDIT (MASTERKEY leftover)
 # -----------------------------
 async def log_admin_credit(user_id: str, amount: str, note: str, db: AsyncSession = None):
-    tid = str(uuid4())
-    ref = generate_transaction_ref("ADM")
-    insert_q = text("""
-        INSERT INTO transactions (id, user_id, type, amount, currency, status, reference, created_at, note)
-        VALUES (:id, :uid, 'admin_credit', :amt, 'usd', 'completed', :ref, :dt, :note)
-    """)
-    await db.execute(insert_q, {
-        "id": tid,
-        "uid": user_id,
-        "amt": amount,
-        "ref": ref,
-        "dt": datetime.utcnow(),
-        "note": note,
-    })
-    return tid
-
+    return await log_transaction(
+        db,
+        user_id=user_id,
+        type="admin_credit",
+        amount=amount,
+        note=note,
+    )
 
 
 # -----------------------------
@@ -173,8 +192,8 @@ async def distribute_signup_bonus(new_user_id: str, referrer_code: Optional[str]
     if not referrer_code:
         return
 
-    master_key = settings.MASTER_REFERRAL_CODE  # ✅ use config
-    percentages = [0.10, 0.085, 0.07225, 0.0614, 0.0522, 0.044]  # Fixed percentages per tier
+    master_key = settings.MASTER_REFERRAL_CODE
+    percentages = [0.10, 0.085, 0.07225, 0.0614, 0.0522, 0.044]
 
     total_distributed = 0.0
     current_code = referrer_code
@@ -190,26 +209,30 @@ async def distribute_signup_bonus(new_user_id: str, referrer_code: Optional[str]
         total_distributed += bonus_amount
 
         # Update referrer balance
-        update_balance = text("UPDATE users SET balance = balance + :amt WHERE id = :uid")
-        await db.execute(update_balance, {"amt": bonus_amount, "uid": referrer.id})
+        await db.execute(
+            text("UPDATE users SET balance = balance + :amt WHERE id = :uid"),
+            {"amt": bonus_amount, "uid": referrer.id},
+        )
 
-        # Log referral bonus transaction
+        # Log bonus
         await log_referral_bonus(referrer.id, new_user_id, str(bonus_amount), tier, db)
 
-        # Move to next level up
+        # Move up chain
         current_code = referrer.referred_by_code
 
-    # Any leftover goes to MASTERKEY
+    # Leftover → MASTERKEY
     leftover = round(signup_fee - total_distributed, 2)
     if leftover > 0:
         result = await db.execute(
             text("SELECT id FROM users WHERE referral_code = :code LIMIT 1"),
-            {"code": master_key}
+            {"code": master_key},
         )
         master = result.fetchone()
         if master:
-            update_balance = text("UPDATE users SET balance = balance + :amt WHERE id = :uid")
-            await db.execute(update_balance, {"amt": leftover, "uid": master.id})
+            await db.execute(
+                text("UPDATE users SET balance = balance + :amt WHERE id = :uid"),
+                {"amt": leftover, "uid": master.id},
+            )
             await log_admin_credit(master.id, str(leftover), f"Leftover from signup of {new_user_id}", db)
 
     await db.commit()

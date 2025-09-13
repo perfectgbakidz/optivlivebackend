@@ -234,21 +234,86 @@ async def approve_withdrawal(admin, withdrawal_id: str, db: AsyncSession):
     if admin["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    query = text("UPDATE withdrawals SET status = 'approved' WHERE id = :wid")
-    await db.execute(query, {"wid": withdrawal_id})
+    # Fetch withdrawal
+    res = await db.execute(
+        text("SELECT * FROM withdrawals WHERE id = :wid AND status = 'pending'"),
+        {"wid": withdrawal_id},
+    )
+    withdrawal = res.mappings().first()
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Withdrawal not found or already processed")
+
+    user_id = withdrawal["user_id"]
+    amount = withdrawal["amount"]
+    currency = withdrawal["currency"]
+
+    # Deduct from user balance
+    await db.execute(
+        text("UPDATE users SET balance = balance - :amt WHERE id = :uid"),
+        {"amt": amount, "uid": user_id},
+    )
+
+    # Mark withdrawal as approved
+    await db.execute(
+        text("UPDATE withdrawals SET status = 'approved' WHERE id = :wid"),
+        {"wid": withdrawal_id},
+    )
+
+    # Log transaction
+    await db.execute(
+        text(
+            """
+            INSERT INTO transactions (
+                id, user_id, type, amount, currency, status, reference, created_at
+            ) VALUES (
+                :id, :uid, 'withdrawal', :amt, :curr, 'completed', :ref, :dt
+            )
+            """
+        ),
+        {
+            "id": str(uuid4()),
+            "uid": user_id,
+            "amt": amount,
+            "curr": currency,
+            "ref": f"WDR-{withdrawal_id}",
+            "dt": datetime.utcnow(),
+        },
+    )
+
     await db.commit()
-    return {"message": f"Withdrawal {withdrawal_id} approved"}
+    return {"message": f"Withdrawal {withdrawal_id} approved and transaction logged"}
 
 
 async def deny_withdrawal(admin, withdrawal_id: str, db: AsyncSession):
     if admin["role"] != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    query = text("UPDATE withdrawals SET status = 'denied' WHERE id = :wid")
-    await db.execute(query, {"wid": withdrawal_id})
-    await db.commit()
-    return {"message": f"Withdrawal {withdrawal_id} denied"}
+    # Fetch withdrawal
+    res = await db.execute(
+        text("SELECT * FROM withdrawals WHERE id = :wid AND status = 'pending'"),
+        {"wid": withdrawal_id},
+    )
+    withdrawal = res.mappings().first()
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Withdrawal not found or already processed")
 
+    user_id = withdrawal["user_id"]
+    amount = withdrawal["amount"]
+
+    # Refund balance if it was already deducted at request time
+    await db.execute(
+        text("UPDATE users SET balance = balance + :amt WHERE id = :uid"),
+        {"amt": amount, "uid": user_id},
+    )
+
+    # Mark withdrawal as denied
+    await db.execute(
+        text("UPDATE withdrawals SET status = 'denied' WHERE id = :wid"),
+        {"wid": withdrawal_id},
+    )
+
+    await db.commit()
+    return {"message": f"Withdrawal {withdrawal_id} denied and balance refunded"}
 
 # -----------------------------
 # TRANSACTIONS

@@ -1,9 +1,14 @@
+# app/services/user_service.py
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from datetime import datetime
+from uuid import uuid4
+
 from app.schemas.user_schemas import (
     ChangePasswordRequest, SetPinRequest, ChangePinRequest, VerifyPinRequest,
-    UserUpdateRequest, UserProfileResponse
+    UserUpdateRequest, UserProfileResponse,
+    WithdrawalRequest, WithdrawalResponse, TransactionResponse
 )
 from app.utils.security import (
     hash_password, verify_password,
@@ -125,3 +130,79 @@ async def verify_user_pin(user: dict, payload: VerifyPinRequest, db: AsyncSessio
         raise HTTPException(status_code=400, detail="Incorrect PIN")
 
     return {"message": "PIN verified successfully"}
+
+
+# -----------------------------
+# WITHDRAWALS
+# -----------------------------
+async def request_withdrawal(user: dict, payload: WithdrawalRequest, db: AsyncSession):
+    # Check balance
+    res = await db.execute(text("SELECT balance FROM users WHERE id = :id"), {"id": user["id"]})
+    balance = res.scalar()
+    if balance is None or balance < float(payload.amount):
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+
+    wid = str(uuid4())
+    await db.execute(
+        text("""
+            INSERT INTO withdrawals (id, user_id, amount, currency, status, requested_at)
+            VALUES (:id, :uid, :amt, :cur, 'pending', :dt)
+        """),
+        {"id": wid, "uid": user["id"], "amt": payload.amount, "cur": payload.currency, "dt": datetime.utcnow()},
+    )
+
+    # Deduct immediately (locked funds)
+    await db.execute(
+        text("UPDATE users SET balance = balance - :amt WHERE id = :uid"),
+        {"amt": payload.amount, "uid": user["id"]},
+    )
+
+    await db.commit()
+    return {"message": "Withdrawal request submitted", "withdrawal_id": wid}
+
+
+async def list_withdrawals(user: dict, db: AsyncSession):
+    query = text("SELECT * FROM withdrawals WHERE user_id = :uid ORDER BY requested_at DESC")
+    result = await db.execute(query, {"uid": user["id"]})
+    records = result.fetchall()
+    return [
+        WithdrawalResponse(
+            id=str(r.id),
+            amount=str(r.amount),
+            currency=r.currency,
+            status=r.status,
+            requested_at=r.requested_at,
+        )
+        for r in records
+    ]
+
+
+# -----------------------------
+# TRANSACTIONS
+# -----------------------------
+async def list_transactions(user: dict, page: int, page_size: int, db: AsyncSession):
+    offset = (page - 1) * page_size
+    query = text("""
+        SELECT * FROM transactions
+        WHERE user_id = :uid
+        ORDER BY created_at DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    result = await db.execute(query, {"uid": user["id"], "limit": page_size, "offset": offset})
+    records = result.fetchall()
+    return [
+        TransactionResponse(
+            id=str(r.id),
+            type=r.type,
+            amount=str(r.amount),
+            currency=r.currency,
+            status=r.status,
+            reference=r.reference,
+            created_at=r.created_at,
+            user_id=getattr(r, "user_id", None),
+            referee_id=getattr(r, "referee_id", None),
+            tier=getattr(r, "tier", None),
+            note=getattr(r, "note", None),
+        )
+        for r in records
+    ]
