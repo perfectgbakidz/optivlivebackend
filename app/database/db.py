@@ -10,45 +10,37 @@ load_dotenv()
 
 DATABASE_URL: str | None = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in the environment.")
+    raise ValueError(" DATABASE_URL is not set in the environment.")
 
-# --- Ensure async driver ---
+# Ensure async driver is used
 if DATABASE_URL.startswith("postgresql+psycopg2"):
     DATABASE_URL = DATABASE_URL.replace("psycopg2", "asyncpg")
 
-# --- Append sslmode=require if missing ---
-if "sslmode" not in DATABASE_URL:
-    DATABASE_URL += "?sslmode=require"
+# Setup SSL context for asyncpg
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE  # Change to CERT_REQUIRED for full verification
 
-# --- SSL context ---
-ssl_context = None
-if os.getenv("DB_SSL", "true").lower() in ("1", "true", "yes"):
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE  # ✅ works around self-signed cert issue
-
-connect_args = {"ssl": ssl_context} if ssl_context else {}
-
-# --- Async engine ---
+# Create async engine with SSL
 engine = create_async_engine(
     DATABASE_URL,
     echo=True,
     future=True,
-    connect_args=connect_args,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
+    connect_args={"ssl": ssl_context},
+    pool_size=5, 
+    max_overflow=10, 
+    pool_timeout=30, 
     pool_recycle=1800,
 )
 
-# --- Session factory ---
+# Async session factory
 AsyncSessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
-    expire_on_commit=False,
+    expire_on_commit=False
 )
 
-# --- FastAPI dependency ---
+# FastAPI dependency
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
