@@ -1,5 +1,4 @@
 import os
-import ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -13,24 +12,23 @@ if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set in the environment.")
 
 # --- Ensure async driver (Supabase gives psycopg2 by default) ---
-if DATABASE_URL.startswith("postgresql+psycopg2"):
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+elif DATABASE_URL.startswith("postgresql+psycopg2://"):
     DATABASE_URL = DATABASE_URL.replace("psycopg2", "asyncpg")
 
-# --- SSL handling ---
-ssl_context = None
-if os.getenv("DB_SSL", "true").lower() in ("1", "true", "yes"):
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_REQUIRED  # ✅ safer than CERT_NONE
-
-connect_args = {"ssl": ssl_context} if ssl_context else {}
+# --- Force sslmode=require (needed for Supabase) ---
+if "sslmode" not in DATABASE_URL:
+    if "?" in DATABASE_URL:
+        DATABASE_URL += "&sslmode=require"
+    else:
+        DATABASE_URL += "?sslmode=require"
 
 # --- Async engine with pool tuning ---
 engine = create_async_engine(
     DATABASE_URL,
     echo=True,             # set False in production
     future=True,
-    connect_args=connect_args,
     pool_size=5,           # small pool for Render free tier
     max_overflow=10,       # allow bursts
     pool_timeout=30,       # fail fast if pool is exhausted
